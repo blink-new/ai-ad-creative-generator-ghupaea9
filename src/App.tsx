@@ -20,7 +20,8 @@ interface AdCreative {
   industry: string
   tone: string
   platform: string
-  createdAt: string
+  created_at: string
+  user_id?: string
 }
 
 function App() {
@@ -41,22 +42,41 @@ function App() {
     const unsubscribe = blink.auth.onAuthStateChanged((state) => {
       setUser(state.user)
       if (state.user) {
-        loadCreatives()
+        loadCreatives(state.user)
       }
     })
     return unsubscribe
   }, [])
 
-  const loadCreatives = async () => {
+  const loadCreatives = async (currentUser = user) => {
+    if (!currentUser?.id) {
+      console.log('No user ID available, skipping load')
+      return
+    }
+    
     try {
+      console.log('Loading creatives for user:', currentUser.id)
       const savedCreatives = await blink.db.ad_creatives.list({
-        where: { user_id: user?.id },
+        where: { user_id: currentUser.id },
         orderBy: { created_at: 'desc' },
         limit: 50
       })
-      setCreatives(savedCreatives || [])
+      console.log('Loaded creatives:', savedCreatives)
+      
+      // Ensure we always have an array
+      if (Array.isArray(savedCreatives)) {
+        setCreatives(savedCreatives)
+      } else if (savedCreatives && typeof savedCreatives === 'object') {
+        // If it's an object with data property
+        const creativesArray = savedCreatives.data || savedCreatives
+        setCreatives(Array.isArray(creativesArray) ? creativesArray : [])
+      } else {
+        setCreatives([])
+      }
     } catch (error) {
       console.error('Error loading creatives:', error)
+      setCreatives([]) // Set empty array on error
+      toast.error('Failed to load your creatives')
     }
   }
 
@@ -134,13 +154,14 @@ function App() {
         industry: formData.industry,
         tone: formData.tone || 'professional',
         platform: formData.platform || 'general',
-        createdAt: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        user_id: user?.id
       }
 
       // Save to database
       await blink.db.ad_creatives.create({
         ...newCreative,
-        user_id: user?.id
+        created_at: new Date().toISOString()
       })
 
       setCreatives(prev => [newCreative, ...prev])
@@ -388,7 +409,7 @@ function App() {
                             </div>
                           </div>
                           <div className="text-sm text-gray-500">
-                            {new Date(creative.createdAt).toLocaleDateString()}
+                            {new Date(creative.created_at).toLocaleDateString()}
                           </div>
                         </div>
                       </CardHeader>
